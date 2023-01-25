@@ -475,6 +475,39 @@ class TestSchedulerJob:
         self.scheduler_job.executor.callback_sink.send.assert_not_called()
         mock_stats_incr.assert_not_called()
 
+    def test_process_executor_events_fail_fast(self, dag_maker):
+        dag_id = "test_process_executor_events_fail_fast"
+        task_id_1 = "dummy_task1"
+        task_id_2 = "dummy_task2"
+        task_id_3 = "dummy_task3"
+
+        session = settings.Session()
+        with dag_maker(dag_id=dag_id, fileloc="/test_path1/", fail_fast=True):
+            task1 = EmptyOperator(task_id=task_id_1)
+            task2 = EmptyOperator(task_id=task_id_2)
+            task3 = EmptyOperator(task_id=task_id_3)
+        ti1 = dag_maker.create_dagrun().get_task_instance(task1.task_id)
+        ti2 = dag_maker.create_dagrun().get_task_instance(task2.task_id)
+        ti3 = dag_maker.create_dagrun().get_task_instance(task3.task_id)
+        executor = MockExecutor(do_update=False)
+        self.scheduler_job = SchedulerJob(executor=executor)
+        self.scheduler_job.id = 1
+        self.scheduler_job.processor_agent = mock.MagicMock()
+
+        ti1.state = State.FAILED
+        ti2.state = State.RUNNING
+        ti3.state = State.RUNNING
+        session.merge(ti1, ti2, ti3)
+        session.commit()
+
+        self.scheduler_job._process_executor_events(session=session)
+        ti1.refresh_from_db(session=session)
+        ti2.refresh_from_db(session=session)
+        ti3.refresh_from_db(session=session)
+        assert ti1.state == State.FAILED
+        assert ti2.state == State.FAILED
+        assert ti3.state == State.FAILED
+
     def test_execute_task_instances_is_paused_wont_execute(self, session, dag_maker):
         dag_id = "SchedulerJobTest.test_execute_task_instances_is_paused_wont_execute"
         task_id_1 = "dummy_task"

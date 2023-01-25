@@ -455,3 +455,12 @@ class BaseExecutor(LoggingMixin):
         if not self.callback_sink:
             raise ValueError("Callback sink is not ready.")
         self.callback_sink.send(request)
+
+    def kill_all_running_tasks_in_dag(self, dag_id):
+        """Fails all tasks that are currently running in the given DAG"""
+        task_instances_to_fail = []
+        for ti in self.running:
+            if ti.dag_id == dag_id:
+                task_instances_to_fail.append(ti)
+        for ti in task_instances_to_fail:
+            self.fail(ti)

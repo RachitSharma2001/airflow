@@ -213,3 +213,14 @@ def test_running_retry_attempt_type(loop_duration, total_tries):
         assert a.elapsed > min_seconds_for_test
     assert a.total_tries == total_tries
     assert a.tries_after_min == 1
+
+
+def test_kill_all_running_tasks_in_dag(dag_maker):
+    executor, dagrun = setup_trigger_tasks(dag_maker)
+    open_slots = 100
+    executor.trigger_tasks(open_slots)
+    executor.kill_all_running_tasks_in_dag(dagrun.dag_id)
+    event_buffer = executor.get_event_buffer()
+    for ti in dagrun.task_instances:
+        assert ti.key not in executor.running
+        assert event_buffer[ti.key][0] == State.FAILED

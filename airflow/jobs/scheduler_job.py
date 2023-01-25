@@ -672,6 +672,10 @@ class SchedulerJob(BaseJob):
                 ti.pid,
             )
 
+            dag = self.dagbag.get_dag(ti.dag_id)
+            if dag.fail_fast and state == TaskInstanceState.FAILED:
+                self.executor.kill_all_running_tasks_in_dag(ti.dag_id)
+
             # There are two scenarios why the same TI with the same try_number is queued
             # after executor is finished with it:
             # 1) the TI was killed externally and it had no time to mark itself failed
@@ -698,7 +702,6 @@ class SchedulerJob(BaseJob):
 
                 # Get task from the Serialized DAG
                 try:
-                    dag = self.dagbag.get_dag(ti.dag_id)
                     task = dag.get_task(ti.task_id)
                 except Exception:
                     self.log.exception("Marking task instance %s as %s", ti, state)
